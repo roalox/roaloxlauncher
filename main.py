@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import colorchooser, messagebox
+from tkinter import colorchooser, messagebox, ttk
 import subprocess
 import os
 import requests
@@ -12,9 +12,7 @@ import re
 CONFIG_FILE = "player_config.lua"
 
 # --- Работа с конфигом в формате .lua ---
-
 def load_config():
-    """Загрузка конфигурации из .lua"""
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             content = f.read()
@@ -22,18 +20,17 @@ def load_config():
             color_match = re.search(r'color\s*=\s*"([^"]*)"', content)
             client_match = re.search(r'client_version\s*=\s*"([^"]*)"', content)
 
-            nick_var.set(nick_match.group(1) if nick_match else "roalox86401")
+            nick_var.set(nick_match.group(1) if nick_match else "roalox")
             color_var.set(color_match.group(1) if color_match else "#ff00ff")
             color_preview.config(bg=color_var.get())
             client_var.set(client_match.group(1) if client_match else "2010")
     else:
-        nick_var.set("roalox77293")
+        nick_var.set("roalox")
         color_var.set("#ff00ff")
         client_var.set("2010")
         color_preview.config(bg=color_var.get())
 
 def save_config():
-    """Сохранение конфигурации в .lua"""
     lua_content = f'''nickname = "{nick_var.get()}"
 color = "{color_var.get()}"
 client_version = "{client_var.get()}"
@@ -42,7 +39,6 @@ client_version = "{client_var.get()}"
         f.write(lua_content)
 
 # --- UI утилиты ---
-
 def choose_color():
     color_code = colorchooser.askcolor(title="Выбери цвет")[1]
     if color_code:
@@ -51,7 +47,6 @@ def choose_color():
 
 def run_game():
     save_config()
-    
     game_exe = r"C:\Path\to\ROaLOX.exe"
     lua_script = r"C:\Path\to\script.lua"
     
@@ -65,13 +60,23 @@ def run_game():
     subprocess.Popen([game_exe, lua_script])
 
 # --- Обновление лаунчера ---
-
-def update_file(url, save_path, logs):
+def update_file(url, save_path, logs, pb, progress, total_files, status_label):
     try:
-        r = requests.get(url)
+        r = requests.get(url, stream=True, timeout=10)
         r.raise_for_status()
+
+        total_size = int(r.headers.get('content-length', 0))
+        downloaded = 0
         with open(save_path, "wb") as f:
-            f.write(r.content)
+            for chunk in r.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    # обновляем прогресс на основе файлов и их загрузки
+                    percent_file = downloaded / total_size if total_size else 1
+                    percent_total = (progress + percent_file) / total_files * 100
+                    root.after(0, pb.config, {"value": percent_total})
+
         logs.append(f"[OK] {save_path} обновлён")
     except Exception as e:
         logs.append(f"[ERR] {save_path}: {e}")
@@ -115,7 +120,7 @@ def show_restart_window(logs):
 
     def auto_restart():
         for i in range(5, 0, -1):
-            label.config(text=f"ROaLOX перезагрузится через {i} секунд")
+            root.after(0, label.config, {"text": f"ROaLOX перезагрузится через {i} секунд"})
             time.sleep(1)
         restart_launcher()
 
@@ -123,13 +128,28 @@ def show_restart_window(logs):
 
 def update_all():
     logs = []
-    print("=== Обновление файлов с GitHub ===")
     base = "https://raw.githubusercontent.com/roalox/roaloxlauncher/refs/heads/main/"
     files_to_update = ["main.py", "script.lua", CONFIG_FILE]
-    for file in files_to_update:
-        update_file(base + file, file, logs)
-    print("✅ Обновление завершено")
-    show_restart_window(logs)
+
+    progress_win = tk.Toplevel(root)
+    progress_win.title("Обновление...")
+    progress_win.geometry("400x150")
+
+    status_label = tk.Label(progress_win, text="Подготовка...", font=("Arial", 12))
+    status_label.pack(pady=10)
+
+    pb = ttk.Progressbar(progress_win, length=300, mode="determinate", maximum=100)
+    pb.pack(pady=10)
+
+    def do_update():
+        total_files = len(files_to_update)
+        for idx, file in enumerate(files_to_update):
+            root.after(0, status_label.config, {"text": f"Загружается: {file}"})
+            update_file(base + file, file, logs, pb, idx, total_files, status_label)
+        root.after(0, progress_win.destroy)
+        root.after(0, show_restart_window, logs)
+
+    threading.Thread(target=do_update, daemon=True).start()
 
 # --- GUI лаунчера ---
 root = tk.Tk()
@@ -171,4 +191,3 @@ tk.Button(root, text="ЗАПУСТИТЬ ROaLOX", command=run_game,
 
 load_config()
 root.mainloop()
-
