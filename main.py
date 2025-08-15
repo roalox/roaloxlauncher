@@ -1,193 +1,158 @@
 import tkinter as tk
-from tkinter import colorchooser, messagebox, ttk
-import subprocess
-import os
-import requests
-import webbrowser
+from tkinter import ttk, colorchooser
 import threading
 import time
-import sys
-import re
+import random
+from PIL import Image, ImageTk
+import os
 
-CONFIG_FILE = "player_config.lua"
+# --- переменные ---
+nick_var = tk.StringVar(value="roaloxtest")
+client_var = tk.StringVar(value="2010")
 
-# --- Работа с конфигом в формате .lua ---
-def load_config():
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            content = f.read()
-            nick_match = re.search(r'nickname\s*=\s*"([^"]*)"', content)
-            color_match = re.search(r'color\s*=\s*"([^"]*)"', content)
-            client_match = re.search(r'client_version\s*=\s*"([^"]*)"', content)
+head_color = tk.StringVar(value="#ff0000")
+body_color = tk.StringVar(value="#00ff00")
+left_leg_color = tk.StringVar(value="#0000ff")
+right_leg_color = tk.StringVar(value="#ffff00")
+arms_color = tk.StringVar(value="#ff00ff")
 
-            nick_var.set(nick_match.group(1) if nick_match else "roalox")
-            color_var.set(color_match.group(1) if color_match else "#ff00ff")
-            color_preview.config(bg=color_var.get())
-            client_var.set(client_match.group(1) if client_match else "2010")
-    else:
-        nick_var.set("roalox")
-        color_var.set("#ff00ff")
-        client_var.set("2010")
-        color_preview.config(bg=color_var.get())
+preview_labels = []
 
-def save_config():
-    lua_content = f'''nickname = "{nick_var.get()}"
-color = "{color_var.get()}"
-client_version = "{client_var.get()}"
-'''
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        f.write(lua_content)
+# --- файлы для "загрузки" локально (имитация) ---
+local_files = ["main.py", "script.lua", "player_config.lua", "logo.png", "assets/"]
 
-# --- UI утилиты ---
-def choose_color():
-    color_code = colorchooser.askcolor(title="Выбери цвет")[1]
-    if color_code:
-        color_var.set(color_code)
-        color_preview.config(bg=color_code)
-
-def run_game():
-    save_config()
-    game_exe = r"C:\Path\to\ROaLOX.exe"
-    lua_script = r"C:\Path\to\script.lua"
-    
-    if not os.path.exists(game_exe):
-        print("Ошибка: игра не найдена!")
-        return
-    if not os.path.exists(lua_script):
-        print("Ошибка: lua скрипт не найден!")
-        return
-
-    subprocess.Popen([game_exe, lua_script])
-
-# --- Обновление лаунчера ---
-def update_file(url, save_path, logs, pb, progress, total_files, status_label):
-    try:
-        r = requests.get(url, stream=True, timeout=10)
-        r.raise_for_status()
-
-        total_size = int(r.headers.get('content-length', 0))
-        downloaded = 0
-        with open(save_path, "wb") as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    # обновляем прогресс на основе файлов и их загрузки
-                    percent_file = downloaded / total_size if total_size else 1
-                    percent_total = (progress + percent_file) / total_files * 100
-                    root.after(0, pb.config, {"value": percent_total})
-
-        logs.append(f"[OK] {save_path} обновлён")
-    except Exception as e:
-        logs.append(f"[ERR] {save_path}: {e}")
-
-def restart_launcher():
-    python = sys.executable
-    os.execl(python, python, *sys.argv)
-
-def open_support():
-    webbrowser.open("https://t.me/ROaLOXaccount")
-
-def show_restart_window(logs):
-    win = tk.Toplevel(root)
-    win.title("Обновление завершено")
-    win.geometry("500x400")
-
-    text = tk.Text(win, wrap="word", height=15)
-    text.pack(fill="both", expand=True, padx=10, pady=10)
-    text.insert("end", "\n".join(logs))
-    text.config(state="disabled")
-
-    label = tk.Label(win, text="ROaLOX перезагрузится через 5 секунд", font=("Arial", 12))
-    label.pack(pady=5)
-
-    btn_frame = tk.Frame(win)
-    btn_frame.pack(side="bottom", fill="x", pady=10, padx=10)
-
-    def abort():
-        win.destroy()
-
-    def restart_now():
-        restart_launcher()
-
-    if any("[ERR]" in log for log in logs):
-        tk.Button(btn_frame, text="Всё равно перезагрузить", command=restart_now, bg="green", fg="white").pack(side="left", padx=5)
-        tk.Button(btn_frame, text="Написать в поддержку", command=open_support, bg="blue", fg="white").pack(side="left", padx=5)
-    else:
-        tk.Button(btn_frame, text="Перезагрузить сейчас", command=restart_now, bg="green", fg="white").pack(side="left", padx=5)
-
-    tk.Button(btn_frame, text="Аборт", command=abort, bg="red", fg="white").pack(side="right", padx=5)
-
-    def auto_restart():
-        for i in range(5, 0, -1):
-            root.after(0, label.config, {"text": f"ROaLOX перезагрузится через {i} секунд"})
-            time.sleep(1)
-        restart_launcher()
-
-    threading.Thread(target=auto_restart, daemon=True).start()
-
-def update_all():
-    logs = []
-    base = "https://raw.githubusercontent.com/roalox/roaloxlauncher/refs/heads/main/"
-    files_to_update = ["main.py", "script.lua", CONFIG_FILE]
-
-    progress_win = tk.Toplevel(root)
-    progress_win.title("Обновление...")
-    progress_win.geometry("400x150")
-
-    status_label = tk.Label(progress_win, text="Подготовка...", font=("Arial", 12))
-    status_label.pack(pady=10)
-
-    pb = ttk.Progressbar(progress_win, length=300, mode="determinate", maximum=100)
-    pb.pack(pady=10)
-
-    def do_update():
-        total_files = len(files_to_update)
-        for idx, file in enumerate(files_to_update):
-            root.after(0, status_label.config, {"text": f"Загружается: {file}"})
-            update_file(base + file, file, logs, pb, idx, total_files, status_label)
-        root.after(0, progress_win.destroy)
-        root.after(0, show_restart_window, logs)
-
-    threading.Thread(target=do_update, daemon=True).start()
-
-# --- GUI лаунчера ---
+# --- главный корень ---
 root = tk.Tk()
 root.title("ROaLOX Launcher")
-root.geometry("800x650")
+root.geometry("900x750")
 
-nick_var = tk.StringVar()
-color_var = tk.StringVar()
-client_var = tk.StringVar()
+# --- Фреймы ---
+loading_frame = tk.Frame(root)
+main_frame = tk.Frame(root)
 
-# фон
-if os.path.exists("fon.png"):
-    bg_image = tk.PhotoImage(file="fon.png")
-    bg_label = tk.Label(root, image=bg_image)
-    bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+loading_frame.place(relx=0.5, rely=0.5, anchor="center")
+main_frame.place(relx=0.5, rely=0.5, anchor="center")
+main_frame.lower()  # спрятать меню
 
-update_btn = tk.Button(root, text="🔄 Обновить", command=update_all,
-                       bg="orange", fg="white", font=("Arial", 10, "bold"))
-update_btn.place(relx=1.0, x=-10, y=10, anchor="ne")
+# --- лого ---
+try:
+    logo_img = Image.open("logo.png")
+except:
+    logo_img = Image.new("RGBA", (200, 200), (255, 0, 0, 255))  # красный квадрат демо
 
-tk.Label(root, text="ROaLOX Launcher", font=("Arial", 20, "bold"), bg="#ffffff").pack(pady=15)
+logo_size = 200
+logo_label = tk.Label(loading_frame)
+logo_label.pack(pady=20)
 
-tk.Label(root, text="Ник персонажа:", font=("Arial", 12), bg="#ffffff").pack(pady=5)
-tk.Entry(root, textvariable=nick_var, font=("Arial", 12), width=20).pack(pady=5)
+# прогрессбар и статус
+pb = ttk.Progressbar(loading_frame, orient="horizontal", length=600, mode="determinate")
+pb.pack(pady=10)
+status_label = tk.Label(loading_frame, text="Загрузка...", font=("Arial", 16))
+status_label.pack(pady=5)
 
-tk.Label(root, text="Цвет персонажа:", font=("Arial", 12), bg="#ffffff").pack(pady=5)
-tk.Button(root, text="Выбрать цвет", command=choose_color, font=("Arial", 12), width=15).pack(pady=5)
-color_preview = tk.Label(root, bg="#ff00ff", width=20, height=1, relief="flat")
-color_preview.pack(pady=5)
+def animate_logo():
+    global logo_size
+    while getattr(threading.current_thread(), "running", True):
+        for delta in range(20):
+            logo_size += 1
+            update_logo()
+            time.sleep(0.02)
+        for delta in range(20):
+            logo_size -= 1
+            update_logo()
+            time.sleep(0.02)
 
-tk.Label(root, text="Выберите версию клиента:", font=("Arial", 12), bg="#ffffff").pack(pady=5)
-client_options = ["2010", "2011"]
-dropdown = tk.OptionMenu(root, client_var, *client_options)
-dropdown.config(font=("Arial", 12), width=15)
-dropdown.pack(pady=5)
+def update_logo():
+    img_resized = logo_img.resize((logo_size, logo_size), Image.ANTIALIAS)
+    tk_img = ImageTk.PhotoImage(img_resized)
+    logo_label.config(image=tk_img)
+    logo_label.image = tk_img
 
-tk.Button(root, text="ЗАПУСТИТЬ ROaLOX", command=run_game,
-          bg="green", fg="white", font=("Arial", 14, "bold"), padx=10, pady=8).pack(pady=15)
+def load_files_sequence():
+    total = len(local_files)
+    for i, file in enumerate(local_files, 1):
+        status_label.config(text=f"Загрузка {file} ({i}/{total})")
+        pb["value"] = (i-1)/total*100
+        # имитация загрузки локального файла
+        time.sleep(random.uniform(0.5, 1.2))
+    pb["value"] = 100
+    time.sleep(0.3)
+    show_main_menu()
 
-load_config()
+def show_main_menu():
+    loading_frame.lower()
+    main_frame.lift()
+    build_main_ui()
+
+# --- Основное меню ---
+def choose_color(var, preview):
+    color_code = colorchooser.askcolor(title="Выбери цвет")[1]
+    if color_code:
+        var.set(color_code)
+        preview.config(bg=color_code)
+
+def random_greeting():
+    greeting_templates = [
+        "Привет, {}!",
+        "Готов к эпичным приключениям, {}?",
+        "{} — ROaLOX ждёт тебя!",
+        "Новая сессия начинается, {}!",
+        "Зови друзей и вперёд, {}!"
+    ]
+    text = random.choice(greeting_templates).format(nick_var.get())
+    label_greet.config(text=text)
+    root.after(30000, random_greeting)
+
+def randomize_colors():
+    for var, preview in zip([head_color, body_color, left_leg_color, right_leg_color, arms_color],
+                            preview_labels):
+        rand_color = "#%06x" % random.randint(0, 0xFFFFFF)
+        var.set(rand_color)
+        preview.config(bg=rand_color)
+
+def build_main_ui():
+    global label_greet, preview_labels
+    label_greet = tk.Label(main_frame, text="", font=("Arial", 24, "bold"), fg="purple")
+    label_greet.pack(pady=20)
+    random_greeting()
+
+    tk.Label(main_frame, text="Ник персонажа:", font=("Arial", 16)).pack(pady=5)
+    tk.Entry(main_frame, textvariable=nick_var, font=("Arial", 16), width=25).pack(pady=5)
+
+    tk.Label(main_frame, text="Версия клиента:", font=("Arial", 16)).pack(pady=5)
+    tk.Entry(main_frame, textvariable=client_var, font=("Arial", 16), width=10).pack(pady=5)
+
+    # кастомизация цветов
+    parts = [
+        ("Голова", head_color),
+        ("Тело", body_color),
+        ("Левая нога", left_leg_color),
+        ("Правая нога", right_leg_color),
+        ("Руки", arms_color)
+    ]
+    preview_labels = []
+    for name, var in parts:
+        frame = tk.Frame(main_frame)
+        frame.pack(pady=5)
+        tk.Label(frame, text=name+":", font=("Arial", 14)).pack(side="left", padx=5)
+        preview = tk.Label(frame, bg=var.get(), width=5, height=1, relief="sunken")
+        preview.pack(side="left", padx=5)
+        preview_labels.append(preview)
+        tk.Button(frame, text="Выбрать цвет", font=("Arial", 12),
+                  command=lambda v=var, p=preview: choose_color(v, p)).pack(side="left", padx=5)
+
+    tk.Button(main_frame, text="🎨 Случайные цвета", font=("Arial", 14, "bold"),
+              bg="blue", fg="white", command=randomize_colors).pack(pady=10)
+
+    tk.Button(main_frame, text="▶ Запустить ROaLOX", font=("Arial", 14, "bold"),
+              bg="green", fg="white", command=lambda: print("🚀 Запуск игры...")).pack(pady=10)
+
+# --- запуск анимации и загрузки ---
+logo_thread = threading.Thread(target=animate_logo, daemon=True)
+logo_thread.running = True
+logo_thread.start()
+
+load_thread = threading.Thread(target=load_files_sequence, daemon=True)
+load_thread.start()
+
 root.mainloop()
