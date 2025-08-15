@@ -1,9 +1,13 @@
 import tkinter as tk
-from tkinter import colorchooser
+from tkinter import colorchooser, messagebox
 import json
 import subprocess
 import os
 import requests
+import webbrowser
+import threading
+import time
+import sys
 
 # --- Функции лаунчера ---
 
@@ -25,7 +29,7 @@ def load_config():
             with open("player_config.json", "r") as f:
                 try:
                     cfg = json.load(f)
-                    nick_var.set(cfg.get("nickname", "roalox977412"))
+                    nick_var.set(cfg.get("nickname", "ZZZ"))
                     color_var.set(cfg.get("color", "#ff00ff"))
                     color_preview.config(bg=color_var.get())
                     client_var.set(cfg.get("client_version", "2010"))
@@ -38,26 +42,72 @@ def choose_color():
         color_var.set(color_code)
         color_preview.config(bg=color_code)
 
-def update_file(url, save_path):
+def update_file(url, save_path, logs):
     try:
         r = requests.get(url)
         r.raise_for_status()
         with open(save_path, "wb") as f:
             f.write(r.content)
-        print(f"{save_path} обновлён!")
+        logs.append(f"[OK] {save_path} обновлён")
     except Exception as e:
-        print(f"Ошибка при обновлении {save_path}: {e}")
+        logs.append(f"[ERR] {save_path}: {e}")
 
-def update_client():
-    print("Обновление клиента...")
-    update_file("https://raw.githubusercontent.com/roalox/roaloxlauncher/refs/heads/main/script.lua", "script.lua")
-    update_file("https://raw.githubusercontent.com/roalox/roaloxlauncher/refs/heads/main/player_config.json", "player_config.json")
-    print("Клиент обновлён!")
+def restart_launcher():
+    python = sys.executable
+    os.execl(python, python, *sys.argv)
 
-def update_launcher():
-    print("Обновление лаунчера...")
-    update_file("https://raw.githubusercontent.com/roalox/roaloxlauncher/refs/heads/main/main.py", "main.py")
-    print("Лаунчер обновлён!")
+def open_support():
+    webbrowser.open("https://t.me/ROaLOXaccount")
+
+def show_restart_window(logs):
+    win = tk.Toplevel(root)
+    win.title("Обновление завершено")
+    win.geometry("500x400")
+
+    text = tk.Text(win, wrap="word", height=15)
+    text.pack(fill="both", expand=True, padx=10, pady=10)
+    text.insert("end", "\n".join(logs))
+    text.config(state="disabled")
+
+    label = tk.Label(win, text="ROaLOX перезагрузится через 5 секунд", font=("Arial", 12))
+    label.pack(pady=5)
+
+    btn_frame = tk.Frame(win)
+    btn_frame.pack(side="bottom", fill="x", pady=10, padx=10)
+
+    def abort():
+        win.destroy()
+
+    def restart_now():
+        restart_launcher()
+
+    # если были ошибки — другая раскладка кнопок
+    if any("[ERR]" in log for log in logs):
+        tk.Button(btn_frame, text="Всё равно перезагрузить", command=restart_now, bg="green", fg="white").pack(side="left", padx=5)
+        tk.Button(btn_frame, text="Написать в поддержку", command=open_support, bg="blue", fg="white").pack(side="left", padx=5)
+    else:
+        tk.Button(btn_frame, text="Перезагрузить сейчас", command=restart_now, bg="green", fg="white").pack(side="left", padx=5)
+
+    tk.Button(btn_frame, text="Аборт", command=abort, bg="red", fg="white").pack(side="right", padx=5)
+
+    # таймер автоперезапуска
+    def auto_restart():
+        for i in range(5, 0, -1):
+            label.config(text=f"ROaLOX перезагрузится через {i} секунд")
+            time.sleep(1)
+        restart_launcher()
+
+    threading.Thread(target=auto_restart, daemon=True).start()
+
+def update_all():
+    logs = []
+    print("=== Обновление файлов с GitHub ===")
+    base = "https://raw.githubusercontent.com/roalox/roaloxlauncher/refs/heads/main/"
+    files_to_update = ["main.py", "script.lua", "player_config.json"]
+    for file in files_to_update:
+        update_file(base + file, file, logs)
+    print("✅ Обновление завершено")
+    show_restart_window(logs)
 
 def run_game():
     config = {
@@ -95,7 +145,12 @@ if os.path.exists("fon.png"):
     bg_label = tk.Label(root, image=bg_image)
     bg_label.place(x=0, y=0, relwidth=1, relheight=1)
 
-# виджеты
+# кнопка обновления в правом верхнем углу
+update_btn = tk.Button(root, text="🔄 Обновить", command=update_all,
+                       bg="orange", fg="white", font=("Arial", 10, "bold"))
+update_btn.place(relx=1.0, x=-10, y=10, anchor="ne")
+
+# все виджеты
 tk.Label(root, text="ROaLOX Launcher", font=("Arial", 20, "bold"), bg="#ffffff").pack(pady=15)
 
 tk.Label(root, text="Ник персонажа:", font=("Arial", 12), bg="#ffffff").pack(pady=5)
@@ -112,11 +167,6 @@ dropdown = tk.OptionMenu(root, client_var, *client_options)
 dropdown.config(font=("Arial", 12), width=15)
 dropdown.pack(pady=5)
 
-# кнопки
-tk.Button(root, text="Обновить клиент", command=update_client,
-          bg="blue", fg="white", font=("Arial", 14, "bold"), padx=10, pady=8).pack(pady=15)
-tk.Button(root, text="Обновить лаунчер", command=update_launcher,
-          bg="purple", fg="white", font=("Arial", 14, "bold"), padx=10, pady=8).pack(pady=5)
 tk.Button(root, text="ЗАПУСТИТЬ ROaLOX", command=run_game,
           bg="green", fg="white", font=("Arial", 14, "bold"), padx=10, pady=8).pack(pady=15)
 
