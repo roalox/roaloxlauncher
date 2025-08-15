@@ -1,13 +1,13 @@
 import tkinter as tk
 from tkinter import ttk, colorchooser
-import threading
-import time
-import random
 from PIL import Image, ImageTk
-import os
+import threading, time, os, subprocess, re, webbrowser
+
+CONFIG_FILE = "player_config.lua"
 
 # --- переменные ---
 nick_var = tk.StringVar(value="roaloxtest")
+color_var = tk.StringVar(value="#ff00ff")
 client_var = tk.StringVar(value="2010")
 
 head_color = tk.StringVar(value="#ff0000")
@@ -16,143 +16,98 @@ left_leg_color = tk.StringVar(value="#0000ff")
 right_leg_color = tk.StringVar(value="#ffff00")
 arms_color = tk.StringVar(value="#ff00ff")
 
-preview_labels = []
-
-# --- файлы для "загрузки" локально (имитация) ---
-local_files = ["main.py", "script.lua", "player_config.lua", "logo.png", "assets/"]
-
-# --- главный корень ---
+# --- GUI ---
 root = tk.Tk()
 root.title("ROaLOX Launcher")
 root.geometry("900x750")
+root.configure(bg="black")
 
-# --- Фреймы ---
-loading_frame = tk.Frame(root)
-main_frame = tk.Frame(root)
+# --- загрузка конфига .lua ---
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            content = f.read()
+            nick_match = re.search(r'nickname\s*=\s*"([^"]*)"', content)
+            color_match = re.search(r'color\s*=\s*"([^"]*)"', content)
+            client_match = re.search(r'client_version\s*=\s*"([^"]*)"', content)
+            nick_var.set(nick_match.group(1) if nick_match else "roaloxtest")
+            color_var.set(color_match.group(1) if color_match else "#ff00ff")
+            client_var.set(client_match.group(1) if client_match else "2010")
+    else:
+        nick_var.set("roaloxtest")
+        color_var.set("#ff00ff")
+        client_var.set("2010")
 
-loading_frame.place(relx=0.5, rely=0.5, anchor="center")
-main_frame.place(relx=0.5, rely=0.5, anchor="center")
-main_frame.lower()  # спрятать меню
+def save_config():
+    lua_content = f'''nickname = "{nick_var.get()}"
+color = "{color_var.get()}"
+client_version = "{client_var.get()}"
+head_color = "{head_color.get()}"
+body_color = "{body_color.get()}"
+left_leg_color = "{left_leg_color.get()}"
+right_leg_color = "{right_leg_color.get()}"
+arms_color = "{arms_color.get()}"
+'''
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        f.write(lua_content)
 
-# --- лого ---
-try:
-    logo_img = Image.open("logo.png")
-except:
-    logo_img = Image.new("RGBA", (200, 200), (255, 0, 0, 255))  # красный квадрат демо
-
-logo_size = 200
-logo_label = tk.Label(loading_frame)
-logo_label.pack(pady=20)
-
-# прогрессбар и статус
-pb = ttk.Progressbar(loading_frame, orient="horizontal", length=600, mode="determinate")
-pb.pack(pady=10)
-status_label = tk.Label(loading_frame, text="Загрузка...", font=("Arial", 16))
-status_label.pack(pady=5)
-
-def animate_logo():
-    global logo_size
-    while getattr(threading.current_thread(), "running", True):
-        for delta in range(20):
-            logo_size += 1
-            update_logo()
-            time.sleep(0.02)
-        for delta in range(20):
-            logo_size -= 1
-            update_logo()
-            time.sleep(0.02)
-
-def update_logo():
-    img_resized = logo_img.resize((logo_size, logo_size), Image.ANTIALIAS)
-    tk_img = ImageTk.PhotoImage(img_resized)
-    logo_label.config(image=tk_img)
-    logo_label.image = tk_img
-
-def load_files_sequence():
-    total = len(local_files)
-    for i, file in enumerate(local_files, 1):
-        status_label.config(text=f"Загрузка {file} ({i}/{total})")
-        pb["value"] = (i-1)/total*100
-        # имитация загрузки локального файла
-        time.sleep(random.uniform(0.5, 1.2))
-    pb["value"] = 100
-    time.sleep(0.3)
-    show_main_menu()
-
-def show_main_menu():
-    loading_frame.lower()
-    main_frame.lift()
-    build_main_ui()
-
-# --- Основное меню ---
-def choose_color(var, preview):
+# --- утилиты ---
+def choose_color(var, preview=None):
     color_code = colorchooser.askcolor(title="Выбери цвет")[1]
     if color_code:
         var.set(color_code)
-        preview.config(bg=color_code)
+        if preview:
+            preview.config(bg=color_code)
 
-def random_greeting():
-    greeting_templates = [
-        "Привет, {}!",
-        "Готов к эпичным приключениям, {}?",
-        "{} — ROaLOX ждёт тебя!",
-        "Новая сессия начинается, {}!",
-        "Зови друзей и вперёд, {}!"
-    ]
-    text = random.choice(greeting_templates).format(nick_var.get())
-    label_greet.config(text=text)
-    root.after(30000, random_greeting)
+def run_game():
+    save_config()
+    game_exe = r"C:\Path\to\ROaLOX.exe"
+    lua_script = r"C:\Path\to\script.lua"
+    if os.path.exists(game_exe) and os.path.exists(lua_script):
+        subprocess.Popen([game_exe, lua_script])
+    else:
+        tk.messagebox.showerror("Ошибка", "Игра или lua скрипт не найдены!")
 
-def randomize_colors():
-    for var, preview in zip([head_color, body_color, left_leg_color, right_leg_color, arms_color],
-                            preview_labels):
-        rand_color = "#%06x" % random.randint(0, 0xFFFFFF)
-        var.set(rand_color)
-        preview.config(bg=rand_color)
+def open_support():
+    webbrowser.open("https://t.me/ROaLOXaccount")
 
-def build_main_ui():
-    global label_greet, preview_labels
-    label_greet = tk.Label(main_frame, text="", font=("Arial", 24, "bold"), fg="purple")
-    label_greet.pack(pady=20)
-    random_greeting()
+# --- фрейм загрузки с логотипом ---
+load_frame = tk.Frame(root, bg="black")
+load_frame.place(relwidth=1, relheight=1)
+logo_path = "logo.png"
+if os.path.exists(logo_path):
+    img = Image.open(logo_path).resize((200, 200))
+    logo_img = ImageTk.PhotoImage(img)
+    logo_label = tk.Label(load_frame, image=logo_img, bg="black")
+    logo_label.pack(expand=True)
+progress = ttk.Progressbar(load_frame, length=400, mode="determinate")
+progress.pack(pady=20)
 
-    tk.Label(main_frame, text="Ник персонажа:", font=("Arial", 16)).pack(pady=5)
-    tk.Entry(main_frame, textvariable=nick_var, font=("Arial", 16), width=25).pack(pady=5)
+def fake_load():
+    steps = ["Загрузка файлов лаунчера...", "Инициализация GUI...", "Применение конфигурации...", "Финализация..."]
+    for i, step in enumerate(steps):
+        progress["value"] = (i+1)/len(steps)*100
+        root.update_idletasks()
+        logo_label.config(width=200 + i*5, height=200 + i*5)
+        time.sleep(0.7)
+    load_frame.destroy()
+    build_main_menu()
 
-    tk.Label(main_frame, text="Версия клиента:", font=("Arial", 16)).pack(pady=5)
-    tk.Entry(main_frame, textvariable=client_var, font=("Arial", 16), width=10).pack(pady=5)
+def build_main_menu():
+    # главный интерфейс
+    tk.Label(root, text=f"Привет, {nick_var.get()}!", font=("Arial", 20, "bold")).pack(pady=10)
+    tk.Label(root, text="Ник персонажа:").pack()
+    tk.Entry(root, textvariable=nick_var).pack()
+    tk.Label(root, text="Цвет персонажа:").pack()
+    color_btn = tk.Button(root, text="Выбрать цвет", command=lambda: choose_color(color_var, color_preview))
+    color_btn.pack()
+    color_preview = tk.Label(root, bg=color_var.get(), width=20, height=1)
+    color_preview.pack()
+    tk.Label(root, text="Выберите версию клиента:").pack()
+    tk.OptionMenu(root, client_var, "2010", "2011").pack()
+    tk.Button(root, text="ЗАПУСТИТЬ ROaLOX", command=run_game, bg="green", fg="white").pack(pady=10)
 
-    # кастомизация цветов
-    parts = [
-        ("Голова", head_color),
-        ("Тело", body_color),
-        ("Левая нога", left_leg_color),
-        ("Правая нога", right_leg_color),
-        ("Руки", arms_color)
-    ]
-    preview_labels = []
-    for name, var in parts:
-        frame = tk.Frame(main_frame)
-        frame.pack(pady=5)
-        tk.Label(frame, text=name+":", font=("Arial", 14)).pack(side="left", padx=5)
-        preview = tk.Label(frame, bg=var.get(), width=5, height=1, relief="sunken")
-        preview.pack(side="left", padx=5)
-        preview_labels.append(preview)
-        tk.Button(frame, text="Выбрать цвет", font=("Arial", 12),
-                  command=lambda v=var, p=preview: choose_color(v, p)).pack(side="left", padx=5)
-
-    tk.Button(main_frame, text="🎨 Случайные цвета", font=("Arial", 14, "bold"),
-              bg="blue", fg="white", command=randomize_colors).pack(pady=10)
-
-    tk.Button(main_frame, text="▶ Запустить ROaLOX", font=("Arial", 14, "bold"),
-              bg="green", fg="white", command=lambda: print("🚀 Запуск игры...")).pack(pady=10)
-
-# --- запуск анимации и загрузки ---
-logo_thread = threading.Thread(target=animate_logo, daemon=True)
-logo_thread.running = True
-logo_thread.start()
-
-load_thread = threading.Thread(target=load_files_sequence, daemon=True)
-load_thread.start()
-
+# --- запуск ---
+load_config()
+threading.Thread(target=fake_load, daemon=True).start()
 root.mainloop()
