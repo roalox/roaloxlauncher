@@ -9,8 +9,8 @@ def load_config():
         with open("player_config.json", "r") as f:
             try:
                 cfg = json.load(f)
-                nick_var.set(cfg.get("nickname", "ZZZ"))
-                color_var.set(cfg.get("color", "#ff00ff"))
+                nick_var.set(cfg.get("nickname", "roalox"))
+                color_var.set(cfg.get("color", "#ffffff"))
                 color_preview.config(bg=color_var.get())
                 client_var.set(cfg.get("client_version", "2010"))
             except json.JSONDecodeError:
@@ -80,3 +80,4 @@ tk.Button(root, text="ЗАПУСТИТЬ ROaLOX", command=run_game,
 load_config()
 
 root.mainloop()
+
