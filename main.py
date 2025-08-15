@@ -22,12 +22,12 @@ def load_config():
             color_match = re.search(r'color\s*=\s*"([^"]*)"', content)
             client_match = re.search(r'client_version\s*=\s*"([^"]*)"', content)
 
-            nick_var.set(nick_match.group(1) if nick_match else "ZZZ")
+            nick_var.set(nick_match.group(1) if nick_match else "roalox86401")
             color_var.set(color_match.group(1) if color_match else "#ff00ff")
             color_preview.config(bg=color_var.get())
             client_var.set(client_match.group(1) if client_match else "2010")
     else:
-        nick_var.set("roalox")
+        nick_var.set("roalox77293")
         color_var.set("#ff00ff")
         client_var.set("2010")
         color_preview.config(bg=color_var.get())
@@ -171,3 +171,4 @@ tk.Button(root, text="ЗАПУСТИТЬ ROaLOX", command=run_game,
 
 load_config()
 root.mainloop()
+
