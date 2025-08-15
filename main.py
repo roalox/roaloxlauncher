@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import colorchooser, messagebox
-import json
 import subprocess
 import os
 import requests
@@ -8,39 +7,64 @@ import webbrowser
 import threading
 import time
 import sys
+import re
 
-# --- Функции лаунчера ---
+CONFIG_FILE = "player_config.lua"
+
+# --- Работа с конфигом в формате .lua ---
 
 def load_config():
-    """Загрузка конфига с GitHub или локально"""
-    config_url = "https://raw.githubusercontent.com/roalox/roaloxlauncher/refs/heads/main/player_config.json"
-    try:
-        response = requests.get(config_url)
-        response.raise_for_status()
-        cfg = response.json()
-        nick_var.set(cfg.get("nickname", "ZZZ"))
-        color_var.set(cfg.get("color", "#ff00ff"))
+    """Загрузка конфигурации из .lua"""
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            content = f.read()
+            nick_match = re.search(r'nickname\s*=\s*"([^"]*)"', content)
+            color_match = re.search(r'color\s*=\s*"([^"]*)"', content)
+            client_match = re.search(r'client_version\s*=\s*"([^"]*)"', content)
+
+            nick_var.set(nick_match.group(1) if nick_match else "ZZZ")
+            color_var.set(color_match.group(1) if color_match else "#ff00ff")
+            color_preview.config(bg=color_var.get())
+            client_var.set(client_match.group(1) if client_match else "2010")
+    else:
+        nick_var.set("roalox")
+        color_var.set("#ff00ff")
+        client_var.set("2010")
         color_preview.config(bg=color_var.get())
-        client_var.set(cfg.get("client_version", "2010"))
-        print("Конфиг загружен с GitHub!")
-    except requests.RequestException:
-        print("Не удалось загрузить конфиг с GitHub, пробуем локальный...")
-        if os.path.exists("player_config.json"):
-            with open("player_config.json", "r") as f:
-                try:
-                    cfg = json.load(f)
-                    nick_var.set(cfg.get("nickname", "ZZZ"))
-                    color_var.set(cfg.get("color", "#ff00ff"))
-                    color_preview.config(bg=color_var.get())
-                    client_var.set(cfg.get("client_version", "2010"))
-                except json.JSONDecodeError:
-                    pass
+
+def save_config():
+    """Сохранение конфигурации в .lua"""
+    lua_content = f'''nickname = "{nick_var.get()}"
+color = "{color_var.get()}"
+client_version = "{client_var.get()}"
+'''
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        f.write(lua_content)
+
+# --- UI утилиты ---
 
 def choose_color():
     color_code = colorchooser.askcolor(title="Выбери цвет")[1]
     if color_code:
         color_var.set(color_code)
         color_preview.config(bg=color_code)
+
+def run_game():
+    save_config()
+    
+    game_exe = r"C:\Path\to\ROaLOX.exe"
+    lua_script = r"C:\Path\to\script.lua"
+    
+    if not os.path.exists(game_exe):
+        print("Ошибка: игра не найдена!")
+        return
+    if not os.path.exists(lua_script):
+        print("Ошибка: lua скрипт не найден!")
+        return
+
+    subprocess.Popen([game_exe, lua_script])
+
+# --- Обновление лаунчера ---
 
 def update_file(url, save_path, logs):
     try:
@@ -81,7 +105,6 @@ def show_restart_window(logs):
     def restart_now():
         restart_launcher()
 
-    # если были ошибки — другая раскладка кнопок
     if any("[ERR]" in log for log in logs):
         tk.Button(btn_frame, text="Всё равно перезагрузить", command=restart_now, bg="green", fg="white").pack(side="left", padx=5)
         tk.Button(btn_frame, text="Написать в поддержку", command=open_support, bg="blue", fg="white").pack(side="left", padx=5)
@@ -90,7 +113,6 @@ def show_restart_window(logs):
 
     tk.Button(btn_frame, text="Аборт", command=abort, bg="red", fg="white").pack(side="right", padx=5)
 
-    # таймер автоперезапуска
     def auto_restart():
         for i in range(5, 0, -1):
             label.config(text=f"ROaLOX перезагрузится через {i} секунд")
@@ -103,32 +125,11 @@ def update_all():
     logs = []
     print("=== Обновление файлов с GitHub ===")
     base = "https://raw.githubusercontent.com/roalox/roaloxlauncher/refs/heads/main/"
-    files_to_update = ["main.py", "script.lua", "player_config.json"]
+    files_to_update = ["main.py", "script.lua", CONFIG_FILE]
     for file in files_to_update:
         update_file(base + file, file, logs)
     print("✅ Обновление завершено")
     show_restart_window(logs)
-
-def run_game():
-    config = {
-        "nickname": nick_var.get(),
-        "color": color_var.get(),
-        "client_version": client_var.get()
-    }
-    with open("player_config.json", "w") as f:
-        json.dump(config, f)
-    
-    game_exe = r"C:\Path\to\ROaLOX.exe"
-    lua_script = r"C:\Path\to\script.lua"
-    
-    if not os.path.exists(game_exe):
-        print("Ошибка: игра не найдена!")
-        return
-    if not os.path.exists(lua_script):
-        print("Ошибка: lua скрипт не найден!")
-        return
-
-    subprocess.Popen([game_exe, lua_script])
 
 # --- GUI лаунчера ---
 root = tk.Tk()
@@ -145,12 +146,10 @@ if os.path.exists("fon.png"):
     bg_label = tk.Label(root, image=bg_image)
     bg_label.place(x=0, y=0, relwidth=1, relheight=1)
 
-# кнопка обновления в правом верхнем углу
 update_btn = tk.Button(root, text="🔄 Обновить", command=update_all,
                        bg="orange", fg="white", font=("Arial", 10, "bold"))
 update_btn.place(relx=1.0, x=-10, y=10, anchor="ne")
 
-# все виджеты
 tk.Label(root, text="ROaLOX Launcher", font=("Arial", 20, "bold"), bg="#ffffff").pack(pady=15)
 
 tk.Label(root, text="Ник персонажа:", font=("Arial", 12), bg="#ffffff").pack(pady=5)
