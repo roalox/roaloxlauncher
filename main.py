@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import colorchooser, messagebox, ttk
+from tkinter import colorchooser, messagebox, ttkы
 import subprocess
 import os
 import requests
@@ -233,3 +233,4 @@ tk.Button(root, text="ЗАПУСТИТЬ ROaLOX", command=run_game,
 
 load_config()
 root.mainloop()
+
